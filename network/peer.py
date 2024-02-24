@@ -1,7 +1,9 @@
 import argparse
+import os
 import socket
 import sys
 import threading
+import time
 
 
 class Peer:
@@ -10,6 +12,7 @@ class Peer:
         self.port = port
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connections = []
+        self.addresses = []
 
     def find_connections(self):
         pass
@@ -19,6 +22,28 @@ class Peer:
 
         self.connections.append(connection)
         print(f"[{self.host:}:{self.port}] Connected to {peer_host}:{peer_port}")
+        time.sleep(1)
+        threading.Thread(target=self.handle_client, args=(connection, (peer_host, peer_port))).start()
+
+    def disconnect(self, connection, address):
+        print(f"[{self.host:}:{self.port}] Connection from {address} closed.")
+        self.connections.remove(connection)
+        connection.close()
+
+    def disconnect_all(self):
+        for connection in self.connections:
+            self.connections.remove(connection)
+            connection.close()
+        print(f"[{self.host:}:{self.port}] All connection closed.")
+
+    def send_data(self, data):
+        for connection in self.connections:
+            try:
+                print(f"[{self.host:}:{self.port}] Send data: {data}")
+                connection.sendall(data.encode())
+            except socket.error as e:
+                print(f"[{self.host:}:{self.port}] Failed to send data. Error: {e}")
+                self.connections.remove(connection)
 
     def listen(self):
         self.socket.bind((self.host, self.port))
@@ -31,14 +56,6 @@ class Peer:
             print(f"[{self.host:}:{self.port}] Accepted connection from {address}")
             threading.Thread(target=self.handle_client, args=(connection, address)).start()
 
-    def send_data(self, data):
-        for connection in self.connections:
-            try:
-                connection.sendall(data.encode())
-            except socket.error as e:
-                print(f"[{self.host:}:{self.port}] Failed to send data. Error: {e}")
-                self.connections.remove(connection)
-
     def handle_client(self, connection, address):
         while True:
             try:
@@ -46,54 +63,58 @@ class Peer:
                 if not data:
                     break
                 print(f"[{self.host:}:{self.port}] Received data from {address}: {data.decode()}")
+                if data.decode() == "bye":
+                    self.disconnect(connection, address)
+                    return
             except socket.error:
                 break
 
-        print(f"[{self.host:}:{self.port}] Connection from {address} closed.")
-        self.connections.remove(connection)
-        connection.close()
+        self.disconnect(connection, address)
+
+    def stop(self):
+        self.disconnect_all()
+
+        # Get the list of all threads in the process
+        all_threads = threading.enumerate()
+
+        # Terminate all threads
+        for thread in all_threads:
+            if thread.name != "MainThread":
+                # print(f"Terminating thread {thread.name} (ID={thread.ident})")
+                os._exit(0)
+
+        self.socket.close()
 
     def start(self):
         listen_thread = threading.Thread(target=self.listen)
         listen_thread.start()
 
 
-# python peer.py --port 8001 --init True --port_2 8000
-# python peer.py --port 8000
+# python peer.py --address 127.0.0.1
 
 # Example usage:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", help="Enter port for peer: ", type=int)
-    parser.add_argument("--init", help="It's the initiator: ", type=bool)
-    parser.add_argument("--port_2", help="Enter port for peer 2: ", type=int)
+    parser.add_argument("--address", help="Enter address for peer: ")
     args = parser.parse_args()
 
-    node = Peer("0.0.0.0", args.port)
+    PORT = 55000
+
+    node = Peer(args.address, PORT)
     node.start()
 
-    if args.init:
-        node.connect('127.0.0.1', args.port_2)
+    address2 = None
 
     while True:
         msg = input('')
-        if msg == "exit":
-            # sys.exit(0)
-            quit(1)
-        node.send_data(msg)
-
-
-    # node1 = Peer("0.0.0.0", 8000)
-    # node1.start()
-    #
-    # node2 = Peer("0.0.0.0", 8001)
-    # node2.start()
-    #
-    # # Give some time for nodes to start listening
-    # import time
-    #
-    # time.sleep(2)
-    #
-    # node2.connect("127.0.0.1", 8000)
-    # time.sleep(1)  # Allow connection to establish
-    # node2.send_data("Hello from node2!")
+        if msg == 'connect':
+            print('Enter address to connection: ')
+            address2 = input()
+            node.connect(address2, PORT)
+        elif msg == "exit":
+            node.stop()
+            sys.exit(0)
+        elif msg == 'show':
+            print(node.connections)
+        else:
+            node.send_data(msg)
