@@ -26,7 +26,7 @@ def find_devices_with_port_open(subnet, port):
         # Scan the network range for devices with the specified port open
         for ip, port in network_range:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(0.1)
+            sock.settimeout(0.05)
             result = sock.connect_ex((ip, port))
 
             # If the port is open, add the IP address to the list
