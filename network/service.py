@@ -1,7 +1,5 @@
 import socket
 
-subnet_lan = '192.168.0'
-
 
 def get_local_ip():
     try:
@@ -40,3 +38,9 @@ def find_devices_with_port_open(subnet, port):
     except Exception as e:
         print(f"Error scanning network: {e}")
         return []
+
+
+def get_subnet(ip_address):
+    elements = ip_address.split('.')
+    subnet = '.'.join(elements[:3])
+    return subnet
