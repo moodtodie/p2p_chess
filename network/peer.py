@@ -130,7 +130,7 @@ class Peer:
             print(f"[{self.host:}:{self.port}] Failed to send data. Error: {e}")
             self.disconnect(connection, address)
 
-    def listen(self):
+    def listen(self, handler):
         self.socket.bind((self.host, self.port))
         self.socket.listen(1)
         print(f"[{self.host:}:{self.port}] Listening for connections on {self.host}:{self.port}")
@@ -140,14 +140,14 @@ class Peer:
                 connection, address = self.socket.accept()
                 if self.active_connection is None:
                     connection.sendall('free'.encode())
-                    threading.Thread(target=self.handle_client, args=(connection, address)).start()
+                    threading.Thread(target=self.handle_client, args=(connection, address, handler)).start()
                 else:
                     connection.sendall('busy'.encode())
             except ConnectionResetError:
                 print(f"[{self.host:}:{self.port}] ConnectionResetError: {ConnectionResetError.mro()}")
                 pass
 
-    def handle_client(self, connection, address):
+    def handle_client(self, connection, address, handler=None):
         while True:
             try:
                 data = connection.recv(1024)
@@ -184,6 +184,8 @@ class Peer:
                         # self.pairing_request(connection, address)
                         self.send_data(connection, address, 'no')
                         self.disconnect(connection, address)
+                elif handler is not None:
+                    handler(data.decode())
 
             except socket.error:
                 break
@@ -219,6 +221,6 @@ class Peer:
 
         self.socket.close()
 
-    def start(self):
-        listen_thread = threading.Thread(target=self.listen)
+    def start(self, handler):
+        listen_thread = threading.Thread(target=self.listen, args=(handler,))
         listen_thread.start()

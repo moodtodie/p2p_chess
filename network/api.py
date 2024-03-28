@@ -1,20 +1,32 @@
+import queue
 from peer import Peer
 from service import get_local_ip
 
 
 class ConnectionApi:
-    def __init__(self, ip_address=get_local_ip(), port=55000):
+    def __init__(self, command_handler=None, ip_address=get_local_ip(), port=55000):
         self.peer = Peer(ip_address, port)
-        self.peer.start()
+
+        if command_handler is not None:
+            self.peer.start(command_handler)
+        else:
+            self.peer.start(self.__put_message__)
 
         self.port = port
         self.is_connected = False
+        self.command_queue = queue.Queue()
 
     def send_message(self, message):
         if self.is_connected:
             self.peer.send_data(self.peer.active_connection, self.peer.connection_address, message)
         else:
             print('Send message error: Connection was not established')
+
+    def __put_message__(self, message):
+        self.command_queue.put(message)
+
+    def get_message(self):
+        return self.command_queue.get()
 
     def connect(self, ip_address):
         pass
