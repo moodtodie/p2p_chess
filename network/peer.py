@@ -1,4 +1,3 @@
-import os
 import socket
 import threading
 import time
@@ -24,11 +23,12 @@ class Peer:
         self.is_real_connection = False
         self.address_is_vacant = False
         self.address_is_busy = False
+        self.stop_loops = False
 
         threading.Thread(target=self.find_connections, args=()).start()
 
     def find_connections(self):
-        while True:
+        while not self.stop_loops:
             if self.active_connection is None:
                 # print(f'[debug] socket: {self.socket}')
                 subnet = get_subnet(self.host)
@@ -55,7 +55,7 @@ class Peer:
                     if self.address_is_vacant is True:
                         free_addresses.append(address)
                         if self.active_connection is not self.free_connection:
-                            self.disconnect(self.free_connection, address)
+                            self.disconnect(self.free_connection)
                         break
                     elif self.address_is_busy:
                         break
@@ -78,7 +78,7 @@ class Peer:
 
             if self.is_real_connection:
                 if self.active_connection is not None:
-                    self.disconnect(self.active_connection, self.connection_address)
+                    self.disconnect(self.active_connection)
 
                 self.active_connection = connection
                 self.connection_address = f'({peer_host}:{peer_port})'
@@ -89,7 +89,7 @@ class Peer:
         except ConnectionRefusedError:
             print(f"[ERROR] Connection refused: {ConnectionRefusedError}")
 
-    def disconnect(self, connection, address):
+    def disconnect(self, connection):
         if not self.is_real_connection:
             self.free_connection = None
 
@@ -114,10 +114,10 @@ class Peer:
             connection.sendall(data.encode())
         except socket.error as e:
             print(f"[{self.host:}:{self.port}] Failed to send data. Error: {e}")
-            self.disconnect(connection, address)
+            self.disconnect(connection)
 
     def listen(self, handler):
-        while True:
+        while not self.stop_loops:
             try:
                 connection, address = self.socket.accept()
                 if self.active_connection is None:
@@ -125,12 +125,12 @@ class Peer:
                     threading.Thread(target=self.handle_client, args=(connection, address, handler)).start()
                 else:
                     connection.sendall('busy'.encode())
-            except ConnectionResetError:
-                print(f"[{self.host:}:{self.port}] ConnectionResetError: {ConnectionResetError.mro()}")
-                pass
+            except socket.error as e:
+                if not self.stop_loops:
+                    print(f"[{self.host:}:{self.port}] (listen) {e}")
 
     def handle_client(self, connection, address, handler=None):
-        while True:
+        while not self.stop_loops:
             try:
                 data = connection.recv(1024)
                 if not data:
@@ -140,10 +140,10 @@ class Peer:
 
                 if data.decode() == "busy":
                     self.address_is_busy = True
-                    self.disconnect(connection, address)
+                    self.disconnect(connection)
                     return
                 elif data.decode() == "bye":
-                    self.disconnect(connection, address)
+                    self.disconnect(connection)
                     return
                 elif data.decode() == 'free':
                     if self.is_real_connection:
@@ -159,21 +159,20 @@ class Peer:
 
                     if self.active_connection is not None:
                         self.send_data(connection, address, 'no')
-                        self.disconnect(connection, address)
+                        self.disconnect(connection)
                     elif self.auto_connect:
                         self.send_confirm_signal(connection, address)
                     else:
                         # self.pairing_request(connection, address)
                         self.send_data(connection, address, 'no')
-                        self.disconnect(connection, address)
+                        self.disconnect(connection)
                 elif handler is not None:
                     handler(data.decode())
-
             except socket.error:
                 break
 
         if self.active_connection is not None:
-            self.disconnect(connection, address)
+            self.disconnect(connection)
 
     def send_confirm_signal(self, connection, address):
         self.is_real_connection = True
@@ -187,22 +186,14 @@ class Peer:
             self.send_confirm_signal(connection, address)
         else:
             self.send_data(connection, address, 'no')
-            self.disconnect(connection, address)
+            self.disconnect(connection)
 
     def stop(self):
         if self.active_connection is not None:
-            self.disconnect(self.active_connection, self.connection_address)
+            self.disconnect(self.active_connection)
 
-        # Get the list of all threads in the process
-        all_threads = threading.enumerate()
-
-        # Terminate all threads
-        for thread in all_threads:
-            if thread.name != "MainThread":
-                os._exit(0)
-
+        self.stop_loops = True
         self.socket.close()
 
     def start(self, handler):
-        listen_thread = threading.Thread(target=self.listen, args=(handler,))
-        listen_thread.start()
+        threading.Thread(target=self.listen, args=(handler,)).start()
