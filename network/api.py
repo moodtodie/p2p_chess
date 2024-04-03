@@ -1,14 +1,18 @@
 import queue
+import time
+
 from peer import Peer
 from service import get_local_ip
 
 
 class ConnectionApi:
-    def __init__(self, command_handler=None, ip_address=get_local_ip(), port=55000):
+    def __init__(self, command_handler=None, ip_address=get_local_ip(), port=5500):
         self.peer = Peer(ip_address, port)
+        self.__get_message__ = self.get_message
 
         if command_handler is not None:
             self.peer.start(command_handler)
+            self.__get_message__ = command_handler
         else:
             self.peer.start(self.__put_message__)
 
@@ -26,7 +30,10 @@ class ConnectionApi:
         self.command_queue.put(message)
 
     def get_message(self):
-        return self.command_queue.get()
+        while self.command_queue.empty():
+            time.sleep(0.3)
+        msg = self.command_queue.get()
+        return msg
 
     def connect(self, ip_address):
         pass
@@ -40,6 +47,7 @@ class ConnectionApi:
         while True:
             if self.peer.addresses and not self.is_connected:
                 self.peer.connect(self.peer.addresses[0], self.port)
+                time.sleep(0.2)
 
             self.update_status()
 

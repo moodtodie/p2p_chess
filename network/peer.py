@@ -7,10 +7,13 @@ from service import find_devices_with_port_open, get_subnet
 
 
 class Peer:
-    def __init__(self, host, port, auto_connect=False):
+    def __init__(self, host, port: int, auto_connect=False):
         self.host = host
         self.port = port
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.bind((self.host, self.port))
+        self.socket.listen(1)
+        print(f"[{self.host:}:{self.port}] Listening for connections on {self.host}:{self.port}")
 
         self.addresses = []
         self.active_connection = None
@@ -21,24 +24,25 @@ class Peer:
         self.is_real_connection = False
         self.address_is_vacant = False
         self.address_is_busy = False
-        self.connection_was_lost = False
-        # self.is_reconnect = False
 
         threading.Thread(target=self.find_connections, args=()).start()
 
     def find_connections(self):
         while True:
             if self.active_connection is None:
+                # print(f'[debug] socket: {self.socket}')
                 subnet = get_subnet(self.host)
                 addresses = find_devices_with_port_open(subnet, self.port)
                 try:
                     addresses.remove(self.host)
                 except ValueError:
                     pass
-                print(f'[find_connections] Any  {addresses}')
+                # print(f'[find_connections] Any  {addresses}')
                 if self.active_connection is None:
                     self.find_free_connections(addresses)
-                print(f'[find_connections] Free {self.addresses}')
+                    print(f'[find_connections] Free {self.addresses}')
+            else:
+                time.sleep(1)
 
     def find_free_connections(self, addresses):
         free_addresses = []
@@ -64,29 +68,12 @@ class Peer:
         self.addresses.clear()
         self.addresses = free_addresses
 
-    # def reconnecting_socket(self, port, timeout=5, retries=5):
-    #     self.connection_was_lost = True
-    #     for attempt in range(retries):
-    #         try:
-    #             sock = socket.create_connection((self, port), timeout)
-    #             self.connection_was_lost = False
-    #             return sock
-    #         except socket.error as e:
-    #             print(f"Connection attempt {attempt + 1} failed: {e}")
-    #             if attempt < retries - 1:
-    #                 time.sleep(2 ** attempt)  # Exponential backoff
-    #             else:
-    #                 raise
-
     def connect(self, peer_host, peer_port):
         self.is_real_connection = True
         self.service_connection(peer_host, peer_port)
 
     def service_connection(self, peer_host, peer_port):
         try:
-            # if self.is_real_connection:
-            #     connection = self.reconnecting_socket(peer_host, peer_port)
-            # else:
             connection = socket.create_connection((peer_host, peer_port))
 
             if self.is_real_connection:
@@ -103,7 +90,6 @@ class Peer:
             print(f"[ERROR] Connection refused: {ConnectionRefusedError}")
 
     def disconnect(self, connection, address):
-        # print(f'[disconnect] Step 1.0 | is real - {self.is_real_connection}')
         if not self.is_real_connection:
             self.free_connection = None
 
@@ -131,10 +117,6 @@ class Peer:
             self.disconnect(connection, address)
 
     def listen(self, handler):
-        self.socket.bind((self.host, self.port))
-        self.socket.listen(1)
-        print(f"[{self.host:}:{self.port}] Listening for connections on {self.host}:{self.port}")
-
         while True:
             try:
                 connection, address = self.socket.accept()
