@@ -68,11 +68,11 @@ class Peer:
         self.addresses.clear()
         self.addresses = free_addresses
 
-    def connect(self, peer_host, peer_port):
+    def connect(self, peer_host, peer_port, handler):
         self.is_real_connection = True
-        self.service_connection(peer_host, peer_port)
+        self.service_connection(peer_host, peer_port, handler)
 
-    def service_connection(self, peer_host, peer_port):
+    def service_connection(self, peer_host, peer_port, handler=None):
         try:
             connection = socket.create_connection((peer_host, peer_port))
 
@@ -85,7 +85,7 @@ class Peer:
                 print(f"[{self.host:}:{self.port}] Connected to {peer_host}:{peer_port}")
 
             time.sleep(1)
-            threading.Thread(target=self.handle_client, args=(connection, (peer_host, peer_port))).start()
+            threading.Thread(target=self.handle_client, args=(connection, (peer_host, peer_port), handler)).start()
         except ConnectionRefusedError:
             print(f"[ERROR] Connection refused: {ConnectionRefusedError}")
 
