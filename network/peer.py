@@ -30,16 +30,19 @@ class Peer:
     def find_connections(self):
         while not self.stop_loops:
             if self.active_connection is None:
-                # print(f'[debug] socket: {self.socket}')
+                # print(f'[debug] [{round(time.time(), 3)}] socket: {self.socket}')
                 subnet = get_subnet(self.host)
                 addresses = find_devices_with_port_open(subnet, self.port)
                 try:
                     addresses.remove(self.host)
                 except ValueError:
                     pass
-                # print(f'[find_connections] Any  {addresses}')
+                # print(f'[debug] [{round(time.time(), 3)}] addresses: {addresses}')
                 if self.active_connection is None:
                     self.find_free_connections(addresses)
+                else:
+                    break
+                if self.active_connection is None:
                     print(f'[find_connections] Free {self.addresses}')
             else:
                 time.sleep(1)
@@ -76,7 +79,8 @@ class Peer:
         try:
             connection = socket.create_connection((peer_host, peer_port))
 
-            if self.is_real_connection:
+            # if self.is_real_connection:
+            if handler is not None:
                 if self.active_connection is not None:
                     self.disconnect(self.active_connection)
 
